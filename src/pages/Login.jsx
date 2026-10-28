@@ -98,9 +98,6 @@ export default function Login() {
               ))}
             </div>
           </div>
-          <p className="relative text-xs text-on-hero-muted">
-            Offline demo · Data is stored in your browser
-          </p>
         </aside>
         <section className="flex items-center justify-center px-5 py-10 sm:px-10 lg:px-12 xl:px-16">
           <div className="w-full max-w-md">
@@ -196,10 +193,6 @@ export default function Login() {
                 <ArrowRight className="ml-auto h-4 w-4" />
               </Button>
             </form>
-
-            <p className="mt-5 text-center text-xs text-(--text-muted) lg:hidden">
-              Offline demo · Data is stored in your browser
-            </p>
           </div>
         </section>
       </div>
