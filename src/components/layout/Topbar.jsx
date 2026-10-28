@@ -25,7 +25,7 @@ export default function Topbar({ onMenuClick, dueCount = 0 }) {
     if (!term || !activeDepartment) return;
     navigate(`/d/${activeDepartment.id}/leads?q=${encodeURIComponent(term)}`);
     setQuery("");
-  };
+  }; 
   return (
     <header className="topbar sticky top-0 z-30 border-b backdrop-blur-xl">
       <div className="mx-auto flex min-h-16 w-full max-w-7xl flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 sm:px-6 lg:px-8">
