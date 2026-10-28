@@ -1,11 +1,6 @@
 import { ROLES } from "../data/constants";
-import {
-  DEMO_BUSINESS_ID,
-  DEMO_DEPARTMENT_ID,
-  seedBusinesses,
-  seedDepartments,
-  seedUsers,
-} from "../data/seedOrg";
+import { seedBusinesses, seedDepartments, seedUsers } from "../data/seedOrg";
+
 import {
   LEGACY_LEADS_KEY,
   STORAGE_KEYS,
@@ -14,30 +9,29 @@ import {
   writeJSON,
 } from "./storage";
 
-// Legacy leads carried a `category` field that no longer exists in the
-// department-based model, so it is dropped while the scope is attached.
-function scopeLead(lead) {
-  const next = {
-    ...lead,
-    businessId: DEMO_BUSINESS_ID,
-    departmentId: DEMO_DEPARTMENT_ID,
-  };
+const DEMO_BUSINESS_ID = "biz-demo";
+const DEMO_DEPARTMENT_ID = "dept-demo-hiring";
+
+function removeDemoLeadScope(lead) {
+  const next = { ...lead };
   delete next.category;
   return next;
 }
 
-// Runs once before the app renders. Fresh demo data starts without departments
-// or sample leads; existing legacy records are preserved during migration.
+// Runs before the app renders. Removes the old demo organisation without
+// clearing real businesses, users or leads saved in this browser.
 export function runMigration() {
-  // Restore required demo records even when a previous run saved empty arrays.
-  // Do not create a department here: admins add departments explicitly.
   const storedBusinesses = readArray(STORAGE_KEYS.businesses);
   const businesses = storedBusinesses.filter(
     (item) =>
-      item && typeof item.id === "string" && typeof item.name === "string",
+      item &&
+      typeof item.id === "string" &&
+      typeof item.name === "string" &&
+      item.id !== DEMO_BUSINESS_ID,
   );
   const nextBusinesses = [...businesses];
   for (const business of seedBusinesses) {
+    if (business.id === DEMO_BUSINESS_ID) continue;
     if (!nextBusinesses.some((item) => item.id === business.id)) {
       nextBusinesses.push(business);
     }
@@ -45,7 +39,7 @@ export function runMigration() {
   if (
     !hasKey(STORAGE_KEYS.businesses) ||
     JSON.stringify(businesses) !== JSON.stringify(storedBusinesses) ||
-    nextBusinesses.length !== businesses.length
+    JSON.stringify(nextBusinesses) !== JSON.stringify(businesses)
   ) {
     writeJSON(STORAGE_KEYS.businesses, nextBusinesses);
   }
@@ -56,11 +50,13 @@ export function runMigration() {
       item &&
       typeof item.id === "string" &&
       typeof item.businessId === "string" &&
-      typeof item.name === "string",
+      typeof item.name === "string" &&
+      item.businessId !== DEMO_BUSINESS_ID &&
+      item.id !== DEMO_DEPARTMENT_ID,
   );
   if (
     !hasKey(STORAGE_KEYS.departments) ||
-    departments.length !== storedDepartments.length
+    JSON.stringify(departments) !== JSON.stringify(storedDepartments)
   ) {
     writeJSON(
       STORAGE_KEYS.departments,
@@ -78,18 +74,20 @@ export function runMigration() {
         typeof user.name === "string" &&
         typeof user.username === "string" &&
         typeof user.password === "string" &&
-        Object.values(ROLES).includes(user.role),
+        Object.values(ROLES).includes(user.role) &&
+        user.businessId !== DEMO_BUSINESS_ID,
     )
     .map((user) => ({
       ...user,
       departmentIds: Array.isArray(user.departmentIds)
-        ? user.departmentIds.filter((id) => typeof id === "string")
+        ? user.departmentIds.filter(
+            (id) => id !== DEMO_DEPARTMENT_ID && typeof id === "string",
+          )
         : [],
     }));
   const nextUsers = [...users];
 
-  // Keep the configured root account in sync with seedOrg.js on existing browsers.
-  // This changes only the Super Admin's credentials and preserves all other records.
+  // Sync the configured Super Admin credentials while preserving its other settings.
   const seedSuperAdmin = seedUsers.find(
     (user) => user.role === ROLES.SUPER_ADMIN,
   );
@@ -114,13 +112,13 @@ export function runMigration() {
       };
     }
   }
+
   for (const user of seedUsers) {
+    if (user.businessId === DEMO_BUSINESS_ID) continue;
     const username = user.username.toLowerCase();
     if (
       !nextUsers.some(
-        (item) =>
-          typeof item?.username === "string" &&
-          item.username.trim().toLowerCase() === username,
+        (item) => item.username?.trim().toLowerCase() === username,
       )
     ) {
       nextUsers.push(user);
@@ -134,27 +132,27 @@ export function runMigration() {
     writeJSON(STORAGE_KEYS.users, nextUsers);
   }
 
+  const cleanLeads = (items) =>
+    items
+      .filter(
+        (lead) =>
+          lead &&
+          typeof lead === "object" &&
+          typeof lead.id === "string" &&
+          lead.businessId !== DEMO_BUSINESS_ID &&
+          lead.departmentId !== DEMO_DEPARTMENT_ID,
+      )
+      .map(removeDemoLeadScope);
+
   if (hasKey(STORAGE_KEYS.leads)) {
-    // Already migrated: only backfill missing scope fields.
     const storedLeads = readArray(STORAGE_KEYS.leads);
-    let changed = false;
-    const leads = storedLeads.filter(
-      (lead) => lead && typeof lead === "object" && typeof lead.id === "string",
-    );
-    if (leads.length !== storedLeads.length) changed = true;
-    const patched = leads.map((lead) => {
-      if (lead.businessId && lead.departmentId && !("category" in lead))
-        return lead;
-      changed = true;
-      return scopeLead(lead);
-    });
-    if (changed) writeJSON(STORAGE_KEYS.leads, patched);
+    const leads = cleanLeads(storedLeads);
+    if (JSON.stringify(leads) !== JSON.stringify(storedLeads)) {
+      writeJSON(STORAGE_KEYS.leads, leads);
+    }
     return;
   }
 
-  const legacyLeads = readArray(LEGACY_LEADS_KEY).filter(
-    (lead) => lead && typeof lead === "object" && typeof lead.id === "string",
-  );
-  const source = legacyLeads;
-  writeJSON(STORAGE_KEYS.leads, source.map(scopeLead));
+  const legacyLeads = readArray(LEGACY_LEADS_KEY);
+  writeJSON(STORAGE_KEYS.leads, cleanLeads(legacyLeads));
 }
